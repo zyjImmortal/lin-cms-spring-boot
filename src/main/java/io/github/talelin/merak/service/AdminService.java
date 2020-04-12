@@ -108,7 +108,7 @@ public interface AdminService {
      * @param dto 数据
      * @return 是否成功
      */
-    boolean dispatchPermissions(DispatchPermissionsDTO dto);
+    boolean dispatchPermissions(DispatchPermissionListDTO dto);
 
     /**
      * 删除权限
@@ -116,7 +116,7 @@ public interface AdminService {
      * @param dto 数据
      * @return 是否成功
      */
-    boolean removePermissions(RemovePermissionsDTO dto);
+    boolean removePermissions(RemovePermissionListDTO dto);
 
     /**
      * 获得所有分组信息

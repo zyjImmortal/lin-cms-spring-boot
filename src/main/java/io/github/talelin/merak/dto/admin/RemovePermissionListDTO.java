@@ -8,7 +8,7 @@ import javax.validation.constraints.Positive;
 import java.util.List;
 
 @Data
-public class RemovePermissionsDTO {
+public class RemovePermissionListDTO {
 
     @Positive(message = "{group.id.positive}")
     @NotNull(message = "{group.id.not-null}")
