@@ -1,5 +1,6 @@
 package io.github.talelin.latticy.service.impl;
 
+import io.github.talelin.autoconfigure.exception.ForbiddenException;
 import io.github.talelin.latticy.common.LocalUser;
 import io.github.talelin.latticy.dto.user.ChangePasswordDTO;
 import io.github.talelin.latticy.dto.user.RegisterDTO;
@@ -7,31 +8,28 @@ import io.github.talelin.latticy.dto.user.UpdateInfoDTO;
 import io.github.talelin.latticy.mapper.*;
 import io.github.talelin.latticy.model.*;
 import lombok.extern.slf4j.Slf4j;
-import org.junit.Before;
-import org.junit.Test;
-import org.junit.runner.RunWith;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.TestInstance;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.annotation.Rollback;
 import org.springframework.test.context.ActiveProfiles;
-import org.springframework.test.context.junit4.SpringRunner;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertNull;
-import static org.junit.Assert.assertTrue;
+import static org.junit.jupiter.api.Assertions.*;
 
-@RunWith(SpringRunner.class)
+
 @SpringBootTest
 @Transactional
 @Rollback
 @Slf4j
 @ActiveProfiles("test")
+@TestInstance(TestInstance.Lifecycle.PER_CLASS)
 public class UserServiceImplTest {
 
     @Autowired
@@ -58,7 +56,7 @@ public class UserServiceImplTest {
     @Autowired
     private UserMapper userMapper;
 
-    public Long mockData() {
+    public Integer mockData() {
         UserDO user = UserDO.builder().username("pedro大大咧咧").nickname("pedro大大咧咧").build();
         GroupDO group = GroupDO.builder().name("测试分组1").info("just for test").build();
         PermissionDO permission1 = PermissionDO.builder().name("权限1").module("炉石传说").build();
@@ -78,7 +76,7 @@ public class UserServiceImplTest {
         return user.getId();
     }
 
-    @Before
+    @BeforeAll
     public void setUp() {
         RegisterDTO dto = new RegisterDTO();
         dto.setUsername("pedro");
@@ -141,15 +139,14 @@ public class UserServiceImplTest {
         dto.setConfirmPassword("147258");
         dto.setOldPassword("123456");
         UserDO user = userService.changeUserPassword(dto);
-
         boolean b = userIdentityService.verifyUsernamePassword(user.getId(), "pedro", "147258");
         assertTrue(b);
     }
 
     @Test
     public void getUserPermissions() {
-        Long id = mockData();
-        List<Map<String, List<Map<String, String>>>> structuringPermissions = userService.getStructualUserPermissions(id);
+        Integer id = mockData();
+        List<Map<String, List<Map<String, String>>>> structuringPermissions = userService.getStructuralUserPermissions(id);
         assertTrue(structuringPermissions.size() > 0);
         log.info("structuringPermissions: {}", structuringPermissions);
         boolean anyMatch = structuringPermissions.stream().anyMatch(it -> it.containsKey("炉石传说"));
@@ -172,7 +169,7 @@ public class UserServiceImplTest {
 
     @Test
     public void checkUserExistById() {
-        boolean b = userService.checkUserExistById(100L);
+        boolean b = userService.checkUserExistById(100);
         assertFalse(b);
     }
 
@@ -195,8 +192,10 @@ public class UserServiceImplTest {
         log.info("user: {}", user);
         assertEquals(user.getUsername(), "pedro111");
         assertNull(user.getEmail());
-
-        boolean b = adminService.deleteUser(user.getId());
+        boolean b = true;
+        try {
+            b = adminService.deleteUser(user.getId());
+        } catch (ForbiddenException ignored) {}
         assertTrue(b);
 
         UserDO newUser = userService.createUser(dto);

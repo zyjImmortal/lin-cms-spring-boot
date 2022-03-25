@@ -5,19 +5,16 @@ import io.github.talelin.latticy.common.mybatis.Page;
 import io.github.talelin.latticy.model.GroupDO;
 import io.github.talelin.latticy.model.UserDO;
 import io.github.talelin.latticy.model.UserGroupDO;
-import org.junit.Test;
-import org.junit.runner.RunWith;
+import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.annotation.Rollback;
 import org.springframework.test.context.ActiveProfiles;
-import org.springframework.test.context.junit4.SpringRunner;
 import org.springframework.transaction.annotation.Transactional;
 
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import static org.junit.Assert.*;
 
-@RunWith(SpringRunner.class)
 @SpringBootTest
 @Transactional
 @Rollback
@@ -73,7 +70,7 @@ public class UserMapperTest {
         userGroupMapper.insert(new UserGroupDO(userDO.getId(), group.getId()));
 
         Page page = new Page(0, 10);
-        IPage<UserDO> iPage = userMapper.selectPageByGroupId(page, group.getId(), 99999L);
+        IPage<UserDO> iPage = userMapper.selectPageByGroupId(page, group.getId(), 99999);
         assertTrue(iPage.getTotal() > 0);
         boolean anyMatch = iPage.getRecords().stream().anyMatch(it -> it.getUsername().equals(username));
         assertTrue(anyMatch);

@@ -1,11 +1,18 @@
 package io.github.talelin.latticy.service.impl;
 
-import cn.hutool.core.bean.BeanUtil;
-import cn.hutool.core.util.StrUtil;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.core.metadata.IPage;
+import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
+import io.github.talelin.autoconfigure.exception.FailedException;
+import io.github.talelin.autoconfigure.exception.ForbiddenException;
+import io.github.talelin.autoconfigure.exception.NotFoundException;
+import io.github.talelin.autoconfigure.exception.ParameterException;
+import io.github.talelin.latticy.bo.LoginCaptchaBO;
 import io.github.talelin.latticy.common.LocalUser;
+import io.github.talelin.latticy.common.configuration.LoginCaptchaProperties;
+import io.github.talelin.latticy.common.enumeration.GroupLevelEnum;
 import io.github.talelin.latticy.common.mybatis.Page;
+import io.github.talelin.latticy.common.util.CaptchaUtil;
 import io.github.talelin.latticy.dto.user.ChangePasswordDTO;
 import io.github.talelin.latticy.dto.user.RegisterDTO;
 import io.github.talelin.latticy.dto.user.UpdateInfoDTO;
@@ -19,15 +26,12 @@ import io.github.talelin.latticy.service.GroupService;
 import io.github.talelin.latticy.service.PermissionService;
 import io.github.talelin.latticy.service.UserIdentityService;
 import io.github.talelin.latticy.service.UserService;
-import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
-import io.github.talelin.autoconfigure.exception.FailedException;
-import io.github.talelin.autoconfigure.exception.ForbiddenException;
-import io.github.talelin.autoconfigure.exception.NotFoundException;
-import io.github.talelin.autoconfigure.exception.ParameterException;
+import io.github.talelin.latticy.vo.LoginCaptchaVO;
+import org.springframework.beans.BeanUtils;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.util.StringUtils;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -37,6 +41,7 @@ import java.util.stream.Collectors;
 /**
  * @author pedro@TaleLin
  * @author colorful@TaleLin
+ * @author Juzi@TaleLin
  */
 @Service
 public class UserServiceImpl extends ServiceImpl<UserMapper, UserDO> implements UserService {
@@ -53,23 +58,20 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, UserDO> implements 
     @Autowired
     private UserGroupMapper userGroupMapper;
 
-    @Value("${group.root.id}")
-    private Long rootGroupId;
-
-    @Value("${group.guest.id}")
-    private Long guestGroupId;
+    @Autowired
+    private LoginCaptchaProperties captchaConfig;
 
     @Transactional
     @Override
     public UserDO createUser(RegisterDTO dto) {
         boolean exist = this.checkUserExistByUsername(dto.getUsername());
         if (exist) {
-            throw new ForbiddenException("username already exist, please choose a new one", 10071);
+            throw new ForbiddenException(10071);
         }
-        if (StrUtil.isNotBlank(dto.getEmail())) {
+        if (StringUtils.hasText(dto.getEmail())) {
             exist = this.checkUserExistByEmail(dto.getEmail());
             if (exist) {
-                throw new ForbiddenException("email already exist, please choose a new one", 10076);
+                throw new ForbiddenException(10076);
             }
         } else {
             // bug 前端如果传入的email为 "" 时，由于数据库中存在""的email，会报duplication错误
@@ -77,7 +79,7 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, UserDO> implements 
             dto.setEmail(null);
         }
         UserDO user = new UserDO();
-        BeanUtil.copyProperties(dto, user);
+        BeanUtils.copyProperties(dto, user);
         this.baseMapper.insert(user);
         if (dto.getGroupIds() != null && !dto.getGroupIds().isEmpty()) {
             checkGroupsValid(dto.getGroupIds());
@@ -89,6 +91,7 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, UserDO> implements 
             userGroupMapper.insertBatch(relations);
         } else {
             // id为2的分组为游客分组
+            Integer guestGroupId = groupService.getParticularGroupIdByLevel(GroupLevelEnum.GUEST);
             UserGroupDO relation = new UserGroupDO(user.getId(), guestGroupId);
             userGroupMapper.insert(relation);
         }
@@ -100,15 +103,32 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, UserDO> implements 
     @Override
     public UserDO updateUserInfo(UpdateInfoDTO dto) {
         UserDO user = LocalUser.getLocalUser();
-        if (StrUtil.isNotBlank(dto.getUsername())) {
+        if (StringUtils.hasText(dto.getUsername())) {
             boolean exist = this.checkUserExistByUsername(dto.getUsername());
             if (exist) {
-                throw new ForbiddenException("username already exist, please choose a new one", 10071);
+                throw new ForbiddenException(10071);
             }
-            user.setUsername(dto.getUsername());
-            userIdentityService.changeUsername(user.getId(), dto.getUsername());
+
+            boolean changeSuccess = userIdentityService.changeUsername(user.getId(), dto.getUsername());
+            if (changeSuccess) {
+                user.setUsername(dto.getUsername());
+            }
         }
-        BeanUtil.copyProperties(dto, user);
+
+        // todo 增加工具类实现忽略 null 的 BeanCopy,简化这段代码
+        if (dto.getUsername() != null) {
+            user.setUsername(dto.getUsername());
+        }
+        if (dto.getAvatar() != null) {
+            user.setAvatar(dto.getAvatar());
+        }
+        if (dto.getEmail() != null) {
+            user.setEmail(dto.getEmail());
+        }
+        if (dto.getNickname() != null) {
+            user.setNickname(dto.getNickname());
+        }
+
         this.baseMapper.updateById(user);
         return user;
     }
@@ -118,30 +138,30 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, UserDO> implements 
         UserDO user = LocalUser.getLocalUser();
         boolean valid = userIdentityService.verifyUsernamePassword(user.getId(), user.getUsername(), dto.getOldPassword());
         if (!valid) {
-            throw new ParameterException("password invalid, please enter correct password", 10032);
+            throw new ParameterException(10032);
         }
         valid = userIdentityService.changePassword(user.getId(), dto.getNewPassword());
         if (!valid) {
-            throw new FailedException("password change failed", 10011);
+            throw new FailedException(10011);
         }
         return user;
     }
 
     @Override
-    public List<GroupDO> getUserGroups(Long userId) {
+    public List<GroupDO> getUserGroups(Integer userId) {
         return groupService.getUserGroupsByUserId(userId);
     }
 
     @Override
-    public List<Map<String, List<Map<String, String>>>> getStructualUserPermissions(Long userId) {
+    public List<Map<String, List<Map<String, String>>>> getStructuralUserPermissions(Integer userId) {
         List<PermissionDO> permissions = getUserPermissions(userId);
         return permissionService.structuringPermissions(permissions);
     }
 
     @Override
-    public List<PermissionDO> getUserPermissions(Long userId) {
+    public List<PermissionDO> getUserPermissions(Integer userId) {
         // 查找用户搜索分组，查找分组下的所有权限
-        List<Long> groupIds = groupService.getUserGroupIdsByUserId(userId);
+        List<Integer> groupIds = groupService.getUserGroupIdsByUserId(userId);
         if (groupIds == null || groupIds.size() == 0) {
             return new ArrayList<>();
         }
@@ -149,8 +169,8 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, UserDO> implements 
     }
 
     @Override
-    public List<PermissionDO> getUserPermissionsByModule(Long userId, String module) {
-        List<Long> groupIds = groupService.getUserGroupIdsByUserId(userId);
+    public List<PermissionDO> getUserPermissionsByModule(Integer userId, String module) {
+        List<Integer> groupIds = groupService.getUserGroupIdsByUserId(userId);
         if (groupIds == null || groupIds.size() == 0) {
             return new ArrayList<>();
         }
@@ -179,28 +199,61 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, UserDO> implements 
     }
 
     @Override
-    public boolean checkUserExistById(Long id) {
+    public boolean checkUserExistById(Integer id) {
         int rows = this.baseMapper.selectCountById(id);
         return rows > 0;
     }
 
     @Override
-    public IPage<UserDO> getUserPageByGroupId(Page<UserDO> pager, Long groupId) {
+    public IPage<UserDO> getUserPageByGroupId(Page<UserDO> pager, Integer groupId) {
+        Integer rootGroupId = groupService.getParticularGroupIdByLevel(GroupLevelEnum.ROOT);
         return this.baseMapper.selectPageByGroupId(pager, groupId, rootGroupId);
     }
 
-    private void checkGroupsExist(List<Long> ids) {
-        for (long id : ids) {
+    @Override
+    public Integer getRootUserId() {
+        Integer rootGroupId = groupService.getParticularGroupIdByLevel(GroupLevelEnum.ROOT);
+        UserGroupDO userGroupDO = null;
+        if (rootGroupId != 0) {
+            QueryWrapper<UserGroupDO> wrapper = new QueryWrapper<>();
+            wrapper.lambda().eq(UserGroupDO::getGroupId, rootGroupId);
+            userGroupDO = userGroupMapper.selectOne(wrapper);
+        }
+        return userGroupDO == null ? 0 : userGroupDO.getUserId();
+    }
+
+    @Override
+    public LoginCaptchaVO generateCaptcha() throws Exception {
+        String code = CaptchaUtil.getRandomString(CaptchaUtil.RANDOM_STR_NUM);
+        String base64String = CaptchaUtil.getRandomCodeBase64(code);
+        String tag = CaptchaUtil.getTag(code, captchaConfig.getSecret(), captchaConfig.getIv());
+        return new LoginCaptchaVO(tag, "data:image/png;base64," + base64String);
+    }
+
+    @Override
+    public boolean verifyCaptcha(String captcha, String tag) {
+        try {
+            LoginCaptchaBO captchaBO = CaptchaUtil.decodeTag(captchaConfig.getSecret(), captchaConfig.getIv(), tag);
+            return captcha.equalsIgnoreCase(captchaBO.getCaptcha()) || System.currentTimeMillis() > captchaBO.getExpired();
+        } catch (Exception e) {
+            log.error(e.getMessage(), e);
+            return false;
+        }
+    }
+
+    private void checkGroupsExist(List<Integer> ids) {
+        for (Integer id : ids) {
             if (!groupService.checkGroupExistById(id)) {
-                throw new NotFoundException("group not found，can't create user", 10023);
+                throw new NotFoundException(10023);
             }
         }
     }
 
-    private void checkGroupsValid(List<Long> ids) {
+    private void checkGroupsValid(List<Integer> ids) {
+        Integer rootGroupId = groupService.getParticularGroupIdByLevel(GroupLevelEnum.ROOT);
         boolean anyMatch = ids.stream().anyMatch(it -> it.equals(rootGroupId));
         if (anyMatch) {
-            throw new ForbiddenException("you can't add user to root group", 10073);
+            throw new ForbiddenException(10073);
         }
     }
 }

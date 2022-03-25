@@ -3,20 +3,18 @@ package io.github.talelin.latticy.mapper;
 import io.github.talelin.latticy.model.GroupDO;
 import io.github.talelin.latticy.model.UserDO;
 import io.github.talelin.latticy.model.UserGroupDO;
-import org.junit.Test;
-import org.junit.runner.RunWith;
+import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.annotation.Rollback;
 import org.springframework.test.context.ActiveProfiles;
-import org.springframework.test.context.junit4.SpringRunner;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 
-import static org.junit.Assert.*;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
-@RunWith(SpringRunner.class)
+
 @SpringBootTest
 @Transactional
 @Rollback
@@ -33,7 +31,7 @@ public class GroupMapperTest {
     private UserGroupMapper userGroupMapper;
 
     @Test
-    public void selectUserGroups() {
+    public void selectGroupsByUserId() {
         String email = "13129982604@qq.com";
         String username = "pedro-test";
         UserDO user = new UserDO();
@@ -46,7 +44,7 @@ public class GroupMapperTest {
 
         userGroupMapper.insert(new UserGroupDO(user.getId(), group.getId()));
 
-        List<GroupDO> groups = groupMapper.selectUserGroups(user.getId());
+        List<GroupDO> groups = groupMapper.selectGroupsByUserId(user.getId());
         boolean anyMatch = groups.stream().anyMatch(it -> it.getName().equals("group"));
         assertTrue(anyMatch);
     }
@@ -66,7 +64,7 @@ public class GroupMapperTest {
 
         userGroupMapper.insert(new UserGroupDO(user.getId(), group.getId()));
 
-        List<Long> groupIds = groupMapper.selectUserGroupIds(user.getId());
+        List<Integer> groupIds = groupMapper.selectUserGroupIds(user.getId());
         boolean anyMatch = groupIds.stream().anyMatch(it -> it.equals(group.getId()));
         assertTrue(anyMatch);
     }

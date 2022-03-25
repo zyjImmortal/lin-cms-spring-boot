@@ -9,17 +9,17 @@ import com.qiniu.util.Auth;
 import io.github.talelin.latticy.module.file.AbstractUploader;
 import io.github.talelin.latticy.module.file.FileConstant;
 import io.github.talelin.latticy.module.file.FileProperties;
-import org.springframework.beans.factory.annotation.Autowired;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 
-import javax.annotation.PostConstruct;
 import java.io.ByteArrayInputStream;
 
 /**
  * 文件上传服务实现，上传到七牛
  *
  * @author pedro@TaleLin
+ * @author colorful@TaleLin
  */
 @Slf4j
 public class QiniuUploader extends AbstractUploader {
@@ -27,24 +27,19 @@ public class QiniuUploader extends AbstractUploader {
     @Autowired
     private FileProperties fileProperties;
 
-    @Value("${lin.cms.file.qiniuyun.access-key}")
+    @Value("${lin.file.qiniuyun.access-key}")
     private String accessKey;
 
-    @Value("${lin.cms.file.qiniuyun.secret-key}")
+    @Value("${lin.file.qiniuyun.secret-key}")
     private String secretKey;
 
-    @Value("${lin.cms.file.qiniuyun.bucket}")
+    @Value("${lin.file.qiniuyun.bucket}")
     private String bucket;
 
     private UploadManager uploadManager;
 
     private String upToken;
 
-    /**
-     * 因为需要得到 spring-boot 提供的配置，所以不能在 constructor 中初始化
-     * 使用 PostConstruct 来初始化
-     */
-    @PostConstruct
     public void initUploadManager() {
         Configuration cfg = new Configuration(Region.region2());
         uploadManager = new UploadManager(cfg);
@@ -76,6 +71,7 @@ public class QiniuUploader extends AbstractUploader {
      */
     @Override
     protected boolean handleOneFile(byte[] bytes, String newFilename) {
+        initUploadManager();
         ByteArrayInputStream byteInputStream = new ByteArrayInputStream(bytes);
         try {
             Response response = uploadManager.put(byteInputStream, newFilename, upToken, null, null);

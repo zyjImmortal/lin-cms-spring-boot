@@ -14,10 +14,11 @@ import java.util.UUID;
  *
  * @author pedro@TaleLin
  * @author Juzi@TaleLin
+ * @author colorful@TaleLin
  */
 public abstract class AbstractUploader implements Uploader {
 
-    private PreHandler preHandler;
+    private UploadHandler uploadHandler;
 
     @Override
     public List<File> upload(MultiValueMap<String, MultipartFile> fileMap) {
@@ -28,8 +29,8 @@ public abstract class AbstractUploader implements Uploader {
     }
 
     @Override
-    public List<File> upload(MultiValueMap<String, MultipartFile> fileMap, PreHandler preHandler) {
-        this.preHandler = preHandler;
+    public List<File> upload(MultiValueMap<String, MultipartFile> fileMap, UploadHandler uploadHandler) {
+        this.uploadHandler = uploadHandler;
         return this.upload(fileMap);
     }
 
@@ -63,12 +64,16 @@ public abstract class AbstractUploader implements Uploader {
                 extension(ext).
                 build();
         // 如果预处理器不为空，且处理结果为false，直接返回, 否则处理
-        if (preHandler != null && !preHandler.handle(fileData)) {
+        if (uploadHandler != null && !uploadHandler.preHandle(fileData)) {
             return;
         }
         boolean ok = handleOneFile(bytes, newFilename);
         if (ok) {
             res.add(fileData);
+            // 上传到本地或云上成功之后，调用afterHandle
+            if (uploadHandler != null) {
+                uploadHandler.afterHandle(fileData);
+            }
         }
     }
 
@@ -120,11 +125,11 @@ public abstract class AbstractUploader implements Uploader {
      */
     protected void checkFileMap(MultiValueMap<String, MultipartFile> fileMap) {
         if (fileMap.isEmpty()) {
-            throw new NotFoundException("file not found", 10026);
+            throw new NotFoundException(10026);
         }
         int nums = getFileProperties().getNums();
         if (fileMap.size() > nums) {
-            throw new FileTooManyException("too many files, amount of files must less than" + nums, 10180);
+            throw new FileTooManyException(10121);
         }
     }
 
@@ -139,7 +144,7 @@ public abstract class AbstractUploader implements Uploader {
         try {
             bytes = file.getBytes();
         } catch (Exception e) {
-            throw new FailedException("read file date failed", 10190);
+            throw new FailedException(10190, "read file date failed");
         }
         return bytes;
     }
